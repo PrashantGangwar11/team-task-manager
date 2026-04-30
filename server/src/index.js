@@ -14,7 +14,10 @@ const app = express();
 const prisma = new PrismaClient();
 
 // middlewares
-app.use(cors({ origin: process.env.CLIENT_URL?.split(",") ?? "*", credentials: true }));
+app.use(cors({
+  origin: process.env.CLIENT_URL?.split(",") ?? "*",
+  credentials: true
+}));
 app.use(express.json());
 app.set("prisma", prisma);
 
@@ -29,11 +32,11 @@ app.use("/api/dashboard", requireAuth, dashboardRouter);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// serve frontend (client/dist)
+// serve frontend
 app.use(express.static(path.join(__dirname, "../../client/dist")));
 
-// handle React routing (IMPORTANT)
-app.get("*", (req, res, next) => {
+// ✅ FIXED (NO "*")
+app.use((req, res, next) => {
   if (req.path.startsWith("/api")) return next();
   res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
 });
