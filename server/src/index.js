@@ -1,8 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import { authRouter } from "./routes/auth.js";
 import { projectsRouter } from "./routes/projects.js";
@@ -27,19 +25,6 @@ app.use("/api/auth", authRouter);
 app.use("/api/projects", requireAuth, projectsRouter);
 app.use("/api/tasks", requireAuth, tasksRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
-
-// path setup
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// serve frontend
-app.use(express.static(path.join(__dirname, "../../client/dist")));
-
-// ✅ FIXED (NO "*")
-app.use((req, res, next) => {
-  if (req.path.startsWith("/api")) return next();
-  res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
-});
 
 // error handler
 app.use((err, _req, res, _next) => {
