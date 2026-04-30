@@ -1,61 +1,126 @@
-import './style.css'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.ts'
+import "./style.css";
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+type User = { id: string; name: string; email: string };
+type Membership = { role: "ADMIN" | "MEMBER"; project: { id: string; name: string } };
 
-<div class="ticks"></div>
+// ✅ API BASE FIX
+const API_BASE =
+  (import.meta.env.VITE_API_URL ||
+    "https://team-task-manager-production-e1db.up.railway.app") + "/api";
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+const app = document.querySelector<HTMLDivElement>("#app")!;
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+let token = localStorage.getItem("token") || "";
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
-zz
+// ✅ SAFE USER PARSE
+let currentUser: User | null = null;
+try {
+  currentUser = JSON.parse(localStorage.getItem("user") || "null");
+} catch {
+  currentUser = null;
+}
+
+// ✅ SAFE REQUEST
+const request = async (path: string, options: RequestInit = {}) => {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  let data: any = {};
+  try {
+    data = await res.json();
+  } catch {}
+
+  if (!res.ok) throw new Error(data?.message || "Request failed");
+  return data;
+};
+
+// ================= AUTH =================
+const renderAuth = () => {
+  app.innerHTML = `
+    <main class="wrap">
+      <h1>Team Task Manager</h1>
+      <form id="authForm" class="card">
+        <input name="name" placeholder="Name (signup only)" />
+        <input name="email" type="email" placeholder="Email" required />
+        <input name="password" type="password" placeholder="Password" required />
+        <select name="mode">
+          <option value="login">Login</option>
+          <option value="signup">Signup</option>
+        </select>
+        <button type="submit">Continue</button>
+      </form>
+      <p id="message" class="error"></p>
+    </main>
+  `;
+
+  const form = document.getElementById("authForm") as HTMLFormElement;
+  const message = document.getElementById("message")!;
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+
+    const fd = new FormData(form);
+    const mode = String(fd.get("mode"));
+
+    try {
+      const data = await request(`/auth/${mode}`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: String(fd.get("name") || ""),
+          email: String(fd.get("email")),
+          password: String(fd.get("password")),
+        }),
+      });
+
+      token = data.token;
+      currentUser = data.user;
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(currentUser));
+
+      renderApp();
+    } catch (err) {
+      message.textContent = (err as Error).message;
+    }
+  };
+};
+
+// ================= APP =================
+const renderApp = async () => {
+  try {
+    const projects = (await request("/projects")) as Membership[];
+
+    app.innerHTML = `
+      <main class="wrap">
+        <h1>Team Task Manager</h1>
+        <p>Welcome ${currentUser?.name}</p>
+
+        <button id="logoutBtn">Logout</button>
+
+        <h3>Your Projects</h3>
+        <ul>
+          ${projects.map((p) => `<li>${p.project.name}</li>`).join("")}
+        </ul>
+      </main>
+    `;
+
+    document.getElementById("logoutBtn")!.onclick = () => {
+      localStorage.clear();
+      token = "";
+      currentUser = null;
+      renderAuth();
+    };
+  } catch (err) {
+    console.error(err);
+    renderAuth();
+  }
+};
+
+// ================= START =================
+if (token && currentUser) renderApp();
+else renderAuth();
